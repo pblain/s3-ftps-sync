@@ -1,4 +1,4 @@
-package com.armchairoctopus.s3ftp;
+package com.armchairoctopus.s3ftps;
 
 public class Request {
     String operation;

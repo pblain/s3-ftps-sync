@@ -1,4 +1,4 @@
-package com.armchairoctopus.s3ftp;
+package com.armchairoctopus.s3ftps;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -35,30 +35,30 @@ public class Sync implements RequestHandler<Request, String> {
     static final Logger logger = LogManager.getLogger(Sync.class);
 
     @Override
-    public String handleRequest(Request input, Context context) {
+    public String handleRequest(Request request, Context context) {
 
-        logger.debug("Operation: " + input.getOperation());
-        if (input.getOperation().equals("get")) {
-            getFiles(input);
-        } else if (input.getOperation().equals("put")) {
-            putFiles(input);
+        logger.debug("Operation: " + request.getOperation());
+        if (request.getOperation().equals("get")) {
+            getFiles(request);
+        } else if (request.getOperation().equals("put")) {
+            putFiles(request);
         } else {
-            logger.error("Unknown operation " + input.getOperation());
+            logger.error("Unknown operation " + request.getOperation());
         }
 
         logger.debug("Success");
         return "Success";
     }
 
-    private void getFiles(Request input) {
+    private void getFiles(Request request) {
         logger.debug("Getting files via sftp");
         try {
-            Session session = getJschSession(input);
+            Session session = getJschSession(request);
             Channel channel = session.openChannel("sftp");
             channel.connect();
             ChannelSftp sftpChannel = (ChannelSftp) channel;
-            Vector<LsEntry> list = sftpLs(sftpChannel, input.getDownloadPath());
-            processList(sftpChannel, list, input);
+            Vector<LsEntry> list = sftpLs(sftpChannel, request.getDownloadPath());
+            processList(sftpChannel, list, request);
             sftpChannel.exit();
             session.disconnect();
         } catch (JSchException e) {
@@ -66,12 +66,12 @@ public class Sync implements RequestHandler<Request, String> {
         }
     }
     
-    private Session getJschSession(Request input) {
+    private Session getJschSession(Request request) {
         logger.debug("Creating JSch session");
         JSch jsch = new JSch();
         Session session = null;
         try {
-            session = jsch.getSession(input.getUser(), input.getHost());
+            session = jsch.getSession(request.getUser(), request.getHost());
 
 
         /*------- This is for testing only! -------*/
@@ -81,7 +81,7 @@ public class Sync implements RequestHandler<Request, String> {
         /*------------------end---------------------*/
 
         // Relies in host key being in known-hosts file
-        session.setPassword(input.getPassword());
+        session.setPassword(request.getPassword());
         session.connect();
         } catch (JSchException e) {
             logger.error("Error:" + e);
@@ -89,7 +89,7 @@ public class Sync implements RequestHandler<Request, String> {
         return session;
     }
 
-    private void processList(ChannelSftp sftpChannel, Vector<LsEntry> list, Request input) {
+    private void processList(ChannelSftp sftpChannel, Vector<LsEntry> list, Request request) {
         for (ChannelSftp.LsEntry oListItem : list) {
             logger.info(oListItem.toString());
 
@@ -98,7 +98,7 @@ public class Sync implements RequestHandler<Request, String> {
                 InputStream stream;
                 try {
                     stream = sftpChannel.get(oListItem.getFilename());
-                    writeToS3(input.getBucket(), input.getDownloadPath() + "/" + oListItem.getFilename(), stream);
+                    writeToS3(request.getBucket(), request.getDownloadPath() + "/" + oListItem.getFilename(), stream);
                 } catch (SftpException e) {
                     logger.error("Error:" + e);
                 }
