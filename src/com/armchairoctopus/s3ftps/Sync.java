@@ -33,14 +33,12 @@ import org.apache.logging.log4j.Logger;
 
 public class Sync implements RequestHandler<Request, String> {
 
-    // Initialize the Log4j logger.
     static final Logger logger = LogManager.getLogger(Sync.class);
     final static String SFTP_GET = "get";
     final static String SFTP_PUT = "put";
 
     @Override
     public String handleRequest(Request request, Context context) {
-
         logger.debug("Operation: " + request.getOperation());
         if (request.getOperation().equals(SFTP_GET)) {
             getFiles(request);
@@ -69,31 +67,26 @@ public class Sync implements RequestHandler<Request, String> {
             logger.error("Error:" + e);
         }
     }
-    
+
     private Session getJschSession(Request request) {
-        
+
         logger.debug("Creating JSch session");
+        Session session = null;
         JSch jsch = new JSch();
-        byte[] key = Base64.getDecoder().decode(request.getHostKey()); 
+        byte[] key = Base64.getDecoder().decode(request.getHostKey());
         try {
             HostKey hostKey = new HostKey(request.host, key);
             jsch.getHostKeyRepository().add(hostKey, null);
-        } catch (JSchException e) {
-            logger.error("Error:" + e);
-        }
-        Session session = null;
-        try {
             session = jsch.getSession(request.getUser(), request.getHost());
 
-        /*------- This is for testing only! -------*/
-     //   java.util.Properties config = new java.util.Properties();
-     //   config.put("StrictHostKeyChecking", "no");
-    //    session.setConfig(config);
-        /*------------------end---------------------*/
+            /*------- This is for testing only! -------*/
+            // java.util.Properties config = new java.util.Properties();
+            // config.put("StrictHostKeyChecking", "no");
+            // session.setConfig(config);
+            /*------------------end---------------------*/
 
-        // Relies in host key being in known-hosts file
-        session.setPassword(request.getPassword());
-        session.connect();
+            session.setPassword(request.getPassword());
+            session.connect();
         } catch (JSchException e) {
             logger.error("Error:" + e);
         }
@@ -114,7 +107,8 @@ public class Sync implements RequestHandler<Request, String> {
                     logger.error("Error:" + e);
                 }
                 // Delete remote file
-                // sftpChannel.rm(oListItem.getFilename()); // Uncomment to delete files on remote host
+                // sftpChannel.rm(oListItem.getFilename()); // Uncomment to
+                // delete files on remote host
             }
         }
     }
@@ -145,7 +139,7 @@ public class Sync implements RequestHandler<Request, String> {
             logger.debug("No files to upload");
             return;
         }
-        
+
         logger.debug("Putting files via sftp");
         try {
             Session session = getJschSession(request);
@@ -154,14 +148,14 @@ public class Sync implements RequestHandler<Request, String> {
             ChannelSftp sftpChannel = (ChannelSftp) channel;
             sftpChannel.cd(request.getUploadPath());
             logger.info("cd " + request.getUploadPath());
-            
+
             for (String key : keys) {
                 logger.debug("Found object with key " + key);
                 S3Object object = s3client.getObject(new GetObjectRequest(request.getBucket(), key));
                 InputStream objectData = object.getObjectContent();
                 String[] keyArray = key.split("/");
                 String fileName = keyArray[keyArray.length - 1];
-                if (!fileName.equals(request.getUploadPath())) { //TODO: this is to prevent upload of the prefix, but needs fixing                   
+                if (!fileName.equals(request.getUploadPath())) { // TODO: this needs fixing
                     logger.info("Uploading " + fileName);
                     sftpChannel.put(objectData, fileName);
                     logger.debug("Moving file to " + request.getSentPath());
@@ -178,29 +172,24 @@ public class Sync implements RequestHandler<Request, String> {
         } catch (SftpException e) {
             logger.error("Error:" + e);
         }
-        
+
     }
 
     private static void writeToS3(String bucketName, String key, InputStream stream) {
         logger.debug("Creating s3client");
         AmazonS3 s3client = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_2).build();
-
         logger.debug("Uploading to S3");
         ObjectMetadata meta = new ObjectMetadata();
         s3client.putObject(bucketName, key, stream, meta);
     }
-    
+
     private List<String> getUploadObjectsFromS3(String uploadPath, String bucketName, AmazonS3 s3client) {
         logger.debug("Getting files to upload");
-        ListObjectsRequest listObjectsRequest = 
-                                    new ListObjectsRequest()
-                                          .withBucketName(bucketName)
-                                          .withPrefix(uploadPath + "/")
-                                          .withDelimiter("/");
-     
+        ListObjectsRequest listObjectsRequest = new ListObjectsRequest().withBucketName(bucketName)
+                .withPrefix(uploadPath + "/").withDelimiter("/");
         List<String> keys = new ArrayList<>();
         ObjectListing objects = s3client.listObjects(listObjectsRequest);
-        
+
         while (objects.getObjectSummaries().size() > 0) {
             List<S3ObjectSummary> summaries = objects.getObjectSummaries();
             summaries.forEach(s -> keys.add(s.getKey()));
