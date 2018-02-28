@@ -2,6 +2,7 @@ package com.armchairoctopus.s3ftps;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Vector;
 
@@ -21,6 +22,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.jcraft.jsch.Channel;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.ChannelSftp.LsEntry;
+import com.jcraft.jsch.HostKey;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
@@ -33,14 +35,16 @@ public class Sync implements RequestHandler<Request, String> {
 
     // Initialize the Log4j logger.
     static final Logger logger = LogManager.getLogger(Sync.class);
+    final static String SFTP_GET = "get";
+    final static String SFTP_PUT = "put";
 
     @Override
     public String handleRequest(Request request, Context context) {
 
         logger.debug("Operation: " + request.getOperation());
-        if (request.getOperation().equals("get")) {
+        if (request.getOperation().equals(SFTP_GET)) {
             getFiles(request);
-        } else if (request.getOperation().equals("put")) {
+        } else if (request.getOperation().equals(SFTP_PUT)) {
             putFiles(request);
         } else {
             logger.error("Unknown operation " + request.getOperation());
@@ -67,17 +71,24 @@ public class Sync implements RequestHandler<Request, String> {
     }
     
     private Session getJschSession(Request request) {
+        
         logger.debug("Creating JSch session");
         JSch jsch = new JSch();
+        byte[] key = Base64.getDecoder().decode(request.getHostKey()); 
+        try {
+            HostKey hostKey = new HostKey(request.host, key);
+            jsch.getHostKeyRepository().add(hostKey, null);
+        } catch (JSchException e) {
+            logger.error("Error:" + e);
+        }
         Session session = null;
         try {
             session = jsch.getSession(request.getUser(), request.getHost());
 
-
         /*------- This is for testing only! -------*/
-        java.util.Properties config = new java.util.Properties();
-        config.put("StrictHostKeyChecking", "no");
-        session.setConfig(config);
+     //   java.util.Properties config = new java.util.Properties();
+     //   config.put("StrictHostKeyChecking", "no");
+    //    session.setConfig(config);
         /*------------------end---------------------*/
 
         // Relies in host key being in known-hosts file

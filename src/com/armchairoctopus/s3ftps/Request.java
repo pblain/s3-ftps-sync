@@ -3,6 +3,7 @@ package com.armchairoctopus.s3ftps;
 public class Request {
     String operation;
     String host;
+    String hostKey;
     String user;
     String password;
     String uploadPath;
@@ -21,6 +22,12 @@ public class Request {
     }
     public void setHost(String host) {
         this.host = host;
+    }
+    public String getHostKey() {
+        return hostKey;
+    }
+    public void setHostKey(String hostKey) {
+        this.hostKey = hostKey;
     }
     public String getUser() {
         return user;
