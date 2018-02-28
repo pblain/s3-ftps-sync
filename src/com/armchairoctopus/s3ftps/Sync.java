@@ -133,7 +133,7 @@ public class Sync implements RequestHandler<Request, String> {
 
     private void putFiles(Request request) {
         AmazonS3 s3client = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_2).build();
-        List<String> keys = getUploadObjectsFromS3(request.getUploadPath(), request.getBucket(), s3client);
+        List<String> keys = listS3Objects(request.getUploadPath(), request.getBucket(), s3client);
 
         if (keys.size() == 0) {
             logger.debug("No files to upload");
@@ -151,19 +151,7 @@ public class Sync implements RequestHandler<Request, String> {
 
             for (String key : keys) {
                 logger.debug("Found object with key " + key);
-                S3Object object = s3client.getObject(new GetObjectRequest(request.getBucket(), key));
-                InputStream objectData = object.getObjectContent();
-                String[] keyArray = key.split("/");
-                String fileName = keyArray[keyArray.length - 1];
-                if (!fileName.equals(request.getUploadPath())) { // TODO: this needs fixing
-                    logger.info("Uploading " + fileName);
-                    sftpChannel.put(objectData, fileName);
-                    logger.debug("Moving file to " + request.getSentPath());
-                    String oldKey = key;
-                    String newKey = key.replace(request.getUploadPath(), request.getSentPath());
-                    s3client.copyObject(new CopyObjectRequest(request.getBucket(), oldKey, request.getBucket(), newKey));
-                    s3client.deleteObject(new DeleteObjectRequest(request.getBucket(), oldKey));
-                }
+                sftpPut(s3client, request, key, sftpChannel);
             }
             sftpChannel.exit();
             session.disconnect();
@@ -172,7 +160,20 @@ public class Sync implements RequestHandler<Request, String> {
         } catch (SftpException e) {
             logger.error("Error:" + e);
         }
-
+    }
+    
+    private static void sftpPut(AmazonS3 s3client, Request request, String key, ChannelSftp sftpChannel) throws SftpException {
+        S3Object object = s3client.getObject(new GetObjectRequest(request.getBucket(), key));
+        InputStream objectData = object.getObjectContent();
+        String[] keyArray = key.split("/");
+        String fileName = keyArray[keyArray.length - 1];
+        logger.info("Putting " + fileName);
+        sftpChannel.put(objectData, fileName);
+        logger.debug("Moving upload object to " + request.getSentPath());
+        String oldKey = key;
+        String newKey = key.replace(request.getUploadPath(), request.getSentPath());
+        s3client.copyObject(new CopyObjectRequest(request.getBucket(), oldKey, request.getBucket(), newKey));
+        s3client.deleteObject(new DeleteObjectRequest(request.getBucket(), oldKey));
     }
 
     private static void writeToS3(String bucketName, String key, InputStream stream) {
@@ -183,13 +184,14 @@ public class Sync implements RequestHandler<Request, String> {
         s3client.putObject(bucketName, key, stream, meta);
     }
 
-    private List<String> getUploadObjectsFromS3(String uploadPath, String bucketName, AmazonS3 s3client) {
-        logger.debug("Getting files to upload");
+    private List<String> listS3Objects(String uploadPath, String bucketName, AmazonS3 s3client) {
+        logger.debug("Listing objects in bucket " + bucketName + " with key prefix " + uploadPath);
         ListObjectsRequest listObjectsRequest = new ListObjectsRequest().withBucketName(bucketName)
-                .withPrefix(uploadPath + "/").withDelimiter("/");
+                .withPrefix(uploadPath + "/").withMarker(uploadPath + "/").withDelimiter("/");
         List<String> keys = new ArrayList<>();
         ObjectListing objects = s3client.listObjects(listObjectsRequest);
-
+        logger.debug(objects.getObjectSummaries().size() + " objects found.");
+        
         while (objects.getObjectSummaries().size() > 0) {
             List<S3ObjectSummary> summaries = objects.getObjectSummaries();
             summaries.forEach(s -> keys.add(s.getKey()));
