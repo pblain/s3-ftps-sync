@@ -179,9 +179,15 @@ public class Sync implements RequestHandler<Request, String> {
     private static void writeToS3(String bucketName, String key, InputStream stream) {
         logger.debug("Creating s3client");
         AmazonS3 s3client = AmazonS3ClientBuilder.standard().withRegion(Regions.US_EAST_2).build();
-        logger.debug("Uploading to S3");
-        ObjectMetadata meta = new ObjectMetadata();
-        s3client.putObject(bucketName, key, stream, meta);
+        
+        boolean exists = s3client.doesObjectExist(bucketName, key);
+        if (exists) {
+            logger.debug(key + " already exists on S3");
+        } else {
+            logger.debug("Uploading to S3");
+            ObjectMetadata meta = new ObjectMetadata();
+            s3client.putObject(bucketName, key, stream, meta);
+        }
     }
 
     private List<String> listS3Objects(String uploadPath, String bucketName, AmazonS3 s3client) {
